@@ -1,20 +1,27 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from rosbags.rosbag1 import Reader
+from pathlib import Path
+from rosbags.highlevel import AnyReader
 from rosbags.typesys import Stores, get_typestore
 
-SCAN_TOPIC = "/base_scan"
-POSE_TOPIC = "/robot_pose_ekf/odom_combined"
+# Topic names per bag source; the first pair present in the bag is used.
+#   ROS1 dataset bag (.bag):          /base_scan + /robot_pose_ekf/odom_combined
+#   RPLIDAR C1 recorder (ROS2 .mcap): /scan      + /lidar_odom
+SCAN_TOPICS = ["/base_scan", "/scan"]
+POSE_TOPICS = ["/robot_pose_ekf/odom_combined", "/lidar_odom"]
 RESOLUTION = 0.05
 SCAN_SKIP = 5          # Reduced from 10 to capture denser scan data and prevent gaps
 RAY_SKIP = 1           # Set to 1 for maximum angular resolution along walls
 MAX_RANGE = 30.0
 MAX_RAY_LENGTH = 15.0  # Increased from 6.0 to prevent cutting off long hallway walls!
 MIN_RANGE = 0.1
-LASER_X = 0.275
-LASER_Y = 0.0
-LASER_YAW = 0.0
+# Laser mount (x, y, yaw) relative to the pose frame, per pose topic.
+# /lidar_odom is already the laser's own pose, so no offset.
+LASER_MOUNTS = {
+    "/robot_pose_ekf/odom_combined": (0.275, 0.0, 0.0),
+    "/lidar_odom": (0.0, 0.0, 0.0),
+}
 MARGIN = 2.0
 
 MAX_ROBOT_SPEED = 1.5              # m/s
@@ -64,27 +71,38 @@ def filter_pose_outliers(pose_times, pose_x, pose_y, pose_yaw, max_speed=MAX_ROB
     return valid
 
 
+def pick_topic(available, candidates, kind):
+    for topic in candidates:
+        if topic in available:
+            return topic
+    raise ValueError(f"No {kind} topic found; looked for {candidates}, bag has {sorted(available)}")
+
+
 def generate_raw_grid(bag_path):
+    """bag_path: a ROS1 .bag, a ROS2 bag folder, or a ROS2 .mcap file."""
     print("Opening bag...")
-    typestore = get_typestore(Stores.ROS1_NOETIC)
     scans, poses = [], []
 
-    with Reader(bag_path) as reader:
-        connections = {
-            c.topic: c for c in reader.connections 
-            if c.topic in [SCAN_TOPIC, POSE_TOPIC]
-        }
+    # AnyReader handles ROS1 and ROS2 bags; the default typestore is only
+    # used for ROS2 bags that don't embed their message definitions.
+    with AnyReader([Path(bag_path)], default_typestore=get_typestore(Stores.ROS2_JAZZY)) as reader:
+        available = {c.topic for c in reader.connections}
+        scan_topic = pick_topic(available, SCAN_TOPICS, "scan")
+        pose_topic = pick_topic(available, POSE_TOPICS, "pose")
+        print(f"Using scan topic {scan_topic} and pose topic {pose_topic}")
+        connections = [c for c in reader.connections if c.topic in (scan_topic, pose_topic)]
 
-        for connection, timestamp, rawdata in reader.messages(connections=connections.values()):
-            msg = typestore.deserialize_ros1(rawdata, connection.msgtype)
-            if connection.topic == SCAN_TOPIC:
+        for connection, timestamp, rawdata in reader.messages(connections=connections):
+            msg = reader.deserialize(rawdata, connection.msgtype)
+            if connection.topic == scan_topic:
                 scans.append((timestamp, msg))
-            elif connection.topic == POSE_TOPIC:
+            elif connection.topic == pose_topic:
                 pose = msg.pose.pose
                 yaw = quaternion_to_yaw(pose.orientation)
                 poses.append((timestamp, pose.position.x, pose.position.y, yaw))
 
     print(f"Scans loaded: {len(scans)} | Poses loaded: {len(poses)}")
+    LASER_X, LASER_Y, LASER_YAW = LASER_MOUNTS[pose_topic]
 
     pose_times = np.array([p[0] for p in poses], dtype=np.int64)
     pose_x = np.array([p[1] for p in poses], dtype=float)
