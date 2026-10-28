@@ -156,6 +156,16 @@ def find_dominant_orientation(lengths, angles):
             max_score = score
             best_angle = candidate_angle
 
+    # Many candidates inside the ±5° window tie on score, and the loop keeps the
+    # first (an edge of the window). Refine to the length-weighted mean angle
+    # of the lines that matched.
+    offsets1 = normalize_angle(angles - best_angle)
+    offsets2 = normalize_angle(angles - (best_angle + 90.0))
+    offsets = np.where(np.abs(offsets1) <= np.abs(offsets2), offsets1, offsets2)
+    matched = np.abs(offsets) <= 5.0
+    if np.any(matched):
+        best_angle += np.average(offsets[matched], weights=lengths[matched])
+
     return normalize_angle(best_angle)
 
 

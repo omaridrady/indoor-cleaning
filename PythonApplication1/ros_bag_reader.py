@@ -11,11 +11,12 @@ from rosbags.typesys import Stores, get_typestore
 SCAN_TOPICS = ["/base_scan", "/scan"]
 POSE_TOPICS = ["/robot_pose_ekf/odom_combined", "/lidar_odom"]
 RESOLUTION = 0.05
-SCAN_SKIP = 5          # Reduced from 10 to capture denser scan data and prevent gaps
+SCAN_SKIP = 1          # Use every scan: the C1's 720-point scans are sparse, so skipping leaves gaps
 RAY_SKIP = 1           # Set to 1 for maximum angular resolution along walls
-MAX_RANGE = 30.0
-MAX_RAY_LENGTH = 15.0  # Increased from 6.0 to prevent cutting off long hallway walls!
-MIN_RANGE = 0.1
+MAX_RANGE = 12.0       # RPLIDAR C1 rated range; farther returns are noisy
+MAX_RAY_LENGTH = 8.0   # Long grazing rays mostly add noise indoors
+MIN_RANGE = 0.15       # Drop returns off the cable / mount right next to the lidar
+OCCUPIED_RATIO = 0.25  # share of rays reaching a cell that must end there for it to count as wall
 # Laser mount (x, y, yaw) relative to the pose frame, per pose topic.
 # /lidar_odom is already the laser's own pose, so no offset.
 LASER_MOUNTS = {
@@ -170,6 +171,8 @@ def generate_raw_grid(bag_path):
     width = int(np.ceil((max_x - min_x) / RESOLUTION))
     height = int(np.ceil((max_y - min_y) / RESOLUTION))
     grid = np.full((height, width), -1, dtype=np.int8)
+    hits = np.zeros((height, width), dtype=np.int32)
+    misses = np.zeros((height, width), dtype=np.int32)
 
     def world_to_grid(x, y):
         return int((x - min_x) / RESOLUTION), int((y - min_y) / RESOLUTION)
@@ -226,12 +229,18 @@ def generate_raw_grid(bag_path):
             cells = bresenham(robot_gx, robot_gy, end_gx, end_gy)
             for cx, cy in cells[:-1]:
                 if 0 <= cx < width and 0 <= cy < height:
-                    grid[cy, cx] = 0
+                    misses[cy, cx] += 1
 
             if is_hit[i] and ranges[i] <= MAX_RAY_LENGTH:
-                grid[end_gy, end_gx] = 1
+                hits[end_gy, end_gx] += 1
             else:
-                grid[end_gy, end_gx] = 0
+                misses[end_gy, end_gx] += 1
+
+    # A cell is a wall if enough of the rays reaching it ended there. Counting
+    # (instead of last ray wins) stops one noisy ray from erasing a wall.
+    seen = (hits + misses) > 0
+    grid[seen] = 0
+    grid[seen & (hits >= OCCUPIED_RATIO * (hits + misses))] = 1
 
     # --------------------------------------------------------
     # POST-PROCESSING: FLOOD-FILL UNREACHABLE SPACE
