@@ -8,9 +8,9 @@ from scipy.spatial import cKDTree
 # Thresholds defined in physical units (meters / m²), not pixels.
 # These stay meaningful across any RESOLUTION or dataset.
 # ----------------------------------------------------------------
-MIN_WALL_NEIGHBORS = 2          # count-based, not a distance -- stays as-is
+MIN_WALL_NEIGHBORS = 1          # C1 walls are 1-cell-thin lines, so 2 neighbours erased whole walls
 
-PRE_FILTER_AREA_M2 = 0.1  # area equivalent of old PRE_FILTER_SIZE=15 px @ 0.05 m/cell
+PRE_FILTER_AREA_M2 = 0.02  # ~8 px @ 0.05 m/cell; 0.1 m² (40 px) removed broken wall segments
 POST_FILTER_AREA_M2 = 100 * (0.05 ** 2)  # area equivalent of old POST_FILTER_SIZE=100 px @ 0.05 m/cell
 DILATION_SIZE_M = 2 * 0.05               # 0.10 m
 CLOSING_SIZE_M = 5 * 0.05                # 0.25 m
