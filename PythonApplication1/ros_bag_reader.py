@@ -79,6 +79,51 @@ def pick_topic(available, candidates, kind):
     raise ValueError(f"No {kind} topic found; looked for {candidates}, bag has {sorted(available)}")
 
 
+def load_slam_map(bag_path):
+    """If slam_toolbox's map was saved next to the bag (<bag>_map.npy + <bag>_map.yaml,
+    as slam_offline.sh does), return (grid, min_x, min_y) in this module's -1/0/1 format.
+
+    slam_toolbox builds that map from its final, loop-closed poses, so it is cleaner than
+    a grid rebuilt from the per-scan poses stored in the bag. Returns None if there is no map.
+    """
+    prefix = str(bag_path).rstrip("/\\")
+    if prefix.endswith(".mcap"):
+        prefix = str(Path(prefix).parent)
+    npy, yml = Path(prefix + "_map.npy"), Path(prefix + "_map.yaml")
+    if not (npy.exists() and yml.exists()):
+        return None
+
+    meta = {}
+    for line in yml.read_text().splitlines():
+        key, _, value = line.partition(":")
+        meta[key.strip()] = value.strip()
+    resolution = float(meta["resolution"])
+    if abs(resolution - RESOLUTION) > 1e-6:
+        print(f"SLAM map resolution {resolution} != RESOLUTION {RESOLUTION}; rebuilding from scans")
+        return None
+    origin_x, origin_y = (float(v) for v in meta["origin"].strip("[]").split(",")[:2])
+
+    probability = np.load(npy)          # slam_toolbox: -1 unknown, 0..100 occupied %
+    grid = np.full(probability.shape, -1, dtype=np.int8)
+    grid[(probability >= 0) & (probability < 50)] = 0
+    grid[probability >= 50] = 1
+    return grid, origin_x, origin_y
+
+
+def save_grid(grid, pose_x, pose_y, min_x, min_y):
+    np.savez(
+        "occupancy_grid_data.npz",
+        grid=grid,
+        pose_x=pose_x,
+        pose_y=pose_y,
+        min_x=min_x,
+        min_y=min_y,
+        resolution=RESOLUTION,
+        max_range=MAX_RANGE
+    )
+    np.save("occupancy_grid.npy", grid)
+
+
 def generate_raw_grid(bag_path):
     """bag_path: a ROS1 .bag, a ROS2 bag folder, or a ROS2 .mcap file."""
     print("Opening bag...")
@@ -117,6 +162,14 @@ def generate_raw_grid(bag_path):
         pose_x = pose_x[valid_mask]
         pose_y = pose_y[valid_mask]
         pose_yaw = pose_yaw[valid_mask]
+
+    slam_map = load_slam_map(bag_path)
+    if slam_map is not None:
+        grid, min_x, min_y = slam_map
+        print(f"Using SLAM map next to the bag ({grid.shape[1]}x{grid.shape[0]} cells) "
+              f"instead of rebuilding the grid from scans")
+        save_grid(grid, pose_x, pose_y, min_x, min_y)
+        return grid, pose_x, pose_y, min_x, min_y, RESOLUTION, MAX_RANGE
 
     # --------------------------------------------------------
     # FIRST PASS: COLLECT WORLD POINTS FOR MAP BOUNDS
@@ -258,15 +311,5 @@ def generate_raw_grid(bag_path):
     grid[(grid == 0) & (free_mask != 2)] = -1
 
     # Save finalized output files
-    np.savez(
-        "occupancy_grid_data.npz", 
-        grid=grid, 
-        pose_x=pose_x, 
-        pose_y=pose_y, 
-        min_x=min_x, 
-        min_y=min_y, 
-        resolution=RESOLUTION, 
-        max_range=MAX_RANGE
-    )
-    np.save("occupancy_grid.npy", grid)
+    save_grid(grid, pose_x, pose_y, min_x, min_y)
     return grid, pose_x, pose_y, min_x, min_y, RESOLUTION, MAX_RANGE
