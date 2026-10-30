@@ -1,8 +1,3 @@
-# Pi-side scripts must keep LF endings even when checked out on Windows.
-lidar_tools/*.sh text eol=lf
-lidar_tools/*.py text eol=lf
-lidar_tools/*.yaml text eol=lf
-lidar_tools/*.cmd text eol=crlf
 *.mcap binary
 *.pgm binary
 *.npy binary
