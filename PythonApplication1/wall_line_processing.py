@@ -7,17 +7,26 @@ import matplotlib.pyplot as plt
 # CONFIGURATION
 # ============================================================
 
-# Douglas-Peucker Polygon Approximation Sensitivity
-# Lower = more detailed vertices, Higher = smoother/stricter lines
-DP_EPSILON_FACTOR = 0.035
+# Douglas-Peucker polygon simplification tolerance, in METERS.
+# (Previously a fraction of each contour's perimeter, which made the
+# tolerance depend on how big the connected wall region was.)
+# Lower = more detailed vertices, higher = smoother/stricter lines.
+DP_EPSILON_METERS = 0.25
 
 # Wall filtering
-MIN_WALL_LENGTH_METERS = 1.2
+MIN_WALL_LENGTH_METERS = 0.6
 
 # Parallel line clustering & merging
 MAX_PARALLEL_DISTANCE_METERS = 0.5
-MAX_MERGE_GAP_METERS = 1.2 
+MAX_MERGE_GAP_METERS = 0.5
 MAX_PARALLEL_ANGLE_DEGREES = 12.0
+
+# Duplicate suppression: a shorter parallel line is removed only if at least
+# this fraction of it overlaps a longer, already-kept line.
+DUPLICATE_OVERLAP_RATIO = 0.5
+
+# Alignment: skip the rotation if the map is already this close to axis-aligned.
+ALIGN_SKIP_BELOW_DEG = 1.0
 
 
 # ============================================================
@@ -35,6 +44,92 @@ def angle_difference(angle1, angle2):
     if difference > 90.0:
         difference = 180.0 - difference
     return difference
+
+
+# ============================================================
+# DOMINANT ORIENTATION + ALIGNMENT
+# ============================================================
+
+def estimate_dominant_angle(grid, resolution):
+    """
+    Length-weighted dominant wall direction, in degrees, in the range (-45, 45].
+    Perpendicular walls reinforce the same answer.
+    """
+    wall_mask = (grid == 1).astype(np.uint8) * 255
+    contours, _ = cv2.findContours(wall_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    sx = 0.0
+    sy = 0.0
+    epsilon = DP_EPSILON_METERS / resolution
+
+    for cnt in contours:
+        approx = cv2.approxPolyDP(cnt, epsilon, True)
+        n = len(approx)
+        if n < 2:
+            continue
+        for i in range(n):
+            p1 = approx[i][0].astype(float)
+            p2 = approx[(i + 1) % n][0].astype(float)
+            d = p2 - p1
+            length = float(np.hypot(d[0], d[1]))
+            if length * resolution < MIN_WALL_LENGTH_METERS:
+                continue
+            a = np.arctan2(d[1], d[0])
+            # Multiplying the angle by 4 makes 0, 90, 180 and 270 degrees all
+            # point the same way, so perpendicular walls vote together.
+            sx += length * np.cos(4.0 * a)
+            sy += length * np.sin(4.0 * a)
+
+    if sx == 0.0 and sy == 0.0:
+        return 0.0
+    return float(np.degrees(np.arctan2(sy, sx) / 4.0))
+
+
+def align_grid_to_walls(grid, resolution, skip_below_deg=ALIGN_SKIP_BELOW_DEG):
+    """
+    Rotates the grid so the dominant walls become horizontal/vertical.
+
+    Returns (aligned_grid, angle_deg, M)
+      aligned_grid : the rotated grid (the original if it was already aligned)
+      angle_deg    : the estimated dominant wall angle
+      M            : 2x3 affine transform, original cell coords -> aligned cell coords.
+                     Use cv2.invertAffineTransform(M) to map results back to the
+                     SLAM map frame when exporting meter coordinates.
+    """
+    angle = estimate_dominant_angle(grid, resolution)
+    print(f"Dominant wall angle: {angle:.2f} degrees")
+
+    identity = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    if abs(angle) < skip_below_deg:
+        print("Map already axis-aligned; skipping rotation.")
+        return grid, 0.0, identity
+
+    h, w = grid.shape
+    M = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), angle, 1.0)
+
+    # Grow the canvas so no corner of the map is cut off by the rotation.
+    corners = np.array([[0, 0, 1], [w, 0, 1], [0, h, 1], [w, h, 1]], dtype=float)
+    moved = corners @ M.T
+    min_xy = moved.min(axis=0)
+    max_xy = moved.max(axis=0)
+    M[:, 2] -= min_xy
+    new_w = int(np.ceil(max_xy[0] - min_xy[0]))
+    new_h = int(np.ceil(max_xy[1] - min_xy[1]))
+
+    # warpAffine does not support int8, so shift {-1,0,1} to {0,1,2}, warp, shift back.
+    shifted = (grid.astype(np.int16) + 1).astype(np.uint8)
+    rotated = cv2.warpAffine(
+        shifted,
+        M,
+        (new_w, new_h),
+        flags=cv2.INTER_NEAREST,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0            # new border area becomes unknown (-1)
+    )
+    aligned = rotated.astype(np.int8) - 1
+
+    print(f"Rotated grid from {w}x{h} to {new_w}x{new_h} cells")
+    return aligned, angle, M
 
 
 # ============================================================
@@ -110,6 +205,17 @@ def segment_gap(line1, line2, family):
     if max1 < min2:
         return min2 - max1
     return min1 - max2
+
+
+def segment_overlap_ratio(line1, line2, family):
+    """Fraction of the SHORTER line that overlaps the other along the primary axis."""
+    min1, max1 = projection_interval(line1, family)
+    min2, max2 = projection_interval(line2, family)
+    overlap = min(max1, max2) - max(min1, min2)
+    shorter = min(max1 - min1, max2 - min2)
+    if shorter <= 0:
+        return 0.0
+    return max(0.0, overlap) / shorter
 
 
 def can_merge_segments(line1, line2, family, resolution):
@@ -188,35 +294,35 @@ def orthogonalize_line(line, family, resolution):
         "family": family
     }
 
+
 def suppress_duplicate_lines(lines, family, resolution):
     """
-    Removes shorter parallel lines that overlap larger dominant walls.
-    Works dynamically for both horizontal and vertical families.
+    Removes shorter parallel lines that substantially overlap a longer,
+    already-kept wall. A line is only removed when at least
+    DUPLICATE_OVERLAP_RATIO of its length overlaps the kept line, so a short
+    wall that merely touches the end of a longer one's span is preserved.
     """
     if not lines:
         return []
-    
-    # Sort by length descending, so we always keep the longest, most dominant walls
+
+    # Longest first, so we always keep the most dominant walls
     lines.sort(key=lambda l: l["length_pixels"], reverse=True)
-    
+
     keep = []
     for current in lines:
         is_duplicate = False
-        
+
         for kept in keep:
-            # Check if they are side-by-side within the tolerance
             p_dist = parallel_distance(current, kept, family)
-            
+
             if p_dist <= (MAX_PARALLEL_DISTANCE_METERS / resolution):
-                # Check if they physically overlap along their primary axis (gap == 0.0)
-                if segment_gap(current, kept, family) == 0.0:
+                if segment_overlap_ratio(current, kept, family) >= DUPLICATE_OVERLAP_RATIO:
                     is_duplicate = True
                     break
-        
-        # Only add the line if it didn't overlap a larger, already-kept line
+
         if not is_duplicate:
             keep.append(current)
-            
+
     return keep
 
 
@@ -260,8 +366,7 @@ def cluster_and_merge_family(lines, family, resolution):
         if ortho["length_meters"] >= MIN_WALL_LENGTH_METERS:
             final_lines.append(ortho)
 
-   
-    # ---> NEW: Run the suppressor to wipe out the stacked/overlapping duplicates
+    # Remove stacked/overlapping duplicates
     final_lines = suppress_duplicate_lines(final_lines, family, resolution)
 
     return final_lines
@@ -272,6 +377,11 @@ def cluster_and_merge_family(lines, family, resolution):
 # ============================================================
 
 def detect_wall_lines(aligned_grid, resolution=0.05):
+    """
+    NOTE: aligned_grid must already have its dominant walls horizontal/vertical
+    (use align_grid_to_walls first). This stage snaps every line to exactly
+    0 or 90 degrees.
+    """
     print()
     print("==============================================")
     print("WALL LINE PROCESSING (CONTOUR APPROXIMATION)")
@@ -282,16 +392,17 @@ def detect_wall_lines(aligned_grid, resolution=0.05):
     wall_mask = np.zeros(aligned_grid.shape, dtype=np.uint8)
     wall_mask[aligned_grid == 1] = 255
 
-    # 2. Find Contours
+    # 2. Find contours
     print("2. Finding wall contours...")
     contours, _ = cv2.findContours(wall_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
     raw_segments = []
 
-    # 3. Douglas-Peucker Polygon Approximation
+    # 3. Douglas-Peucker polygon approximation (tolerance in meters)
     print("3. Running Douglas-Peucker Polygon Approximation...")
+    epsilon = DP_EPSILON_METERS / resolution
+
     for cnt in contours:
-        epsilon = DP_EPSILON_FACTOR * cv2.arcLength(cnt, True)
         approx = cv2.approxPolyDP(cnt, epsilon, True)
 
         n_pts = len(approx)

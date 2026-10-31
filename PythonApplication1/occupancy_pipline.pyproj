@@ -5,7 +5,7 @@
     <ProjectGuid>a201c99d-e895-4a12-bcb7-43d81947520e</ProjectGuid>
     <ProjectHome>
     </ProjectHome>
-    <StartupFile>test_file.py</StartupFile>
+    <StartupFile>main.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -25,7 +25,6 @@
     <Compile Include="hough_detection.py" />
     <Compile Include="main.py" />
     <Compile Include="occupancy_cleaner.py" />
-    <Compile Include="orientation_alignment.py" />
     <Compile Include="room_polygon_builder.py" />
     <Compile Include="ros_bag_reader.py" />
     <Compile Include="test_file.py" />
