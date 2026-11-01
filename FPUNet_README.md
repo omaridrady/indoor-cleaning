@@ -9,3 +9,5 @@ These files are on the branch fpunet-retraining.
 
 Optional: our first retrained model (best_fpunet_128_10.pth) is shared by Google Drive.
 It is only used in Part 5 to compare against.
+
+https://drive.google.com/file/d/1OP_HNzKOGe6fBqAmwE0nwpWf7yQRHRXu/view?usp=sharing
