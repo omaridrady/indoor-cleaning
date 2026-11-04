@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # (Previously a fraction of each contour's perimeter, which made the
 # tolerance depend on how big the connected wall region was.)
 # Lower = more detailed vertices, higher = smoother/stricter lines.
-DP_EPSILON_METERS = 0.25
+DP_EPSILON_METERS = 0.15
 
 # Wall filtering
 MIN_WALL_LENGTH_METERS = 0.6
@@ -85,7 +85,7 @@ def estimate_dominant_angle(grid, resolution):
     return float(np.degrees(np.arctan2(sy, sx) / 4.0))
 
 
-def align_grid_to_walls(grid, resolution, skip_below_deg=ALIGN_SKIP_BELOW_DEG):
+def align_grid_to_walls(grid, resolution, skip_below_deg=ALIGN_SKIP_BELOW_DEG, angle_override=None):
     """
     Rotates the grid so the dominant walls become horizontal/vertical.
 
@@ -96,8 +96,15 @@ def align_grid_to_walls(grid, resolution, skip_below_deg=ALIGN_SKIP_BELOW_DEG):
                      Use cv2.invertAffineTransform(M) to map results back to the
                      SLAM map frame when exporting meter coordinates.
     """
-    angle = estimate_dominant_angle(grid, resolution)
-    print(f"Dominant wall angle: {angle:.2f} degrees")
+    # angle_override lets two different grids (e.g. classic-cleaned and
+    # FPUNet-cleaned) be rotated by exactly the same angle, so their results
+    # live in the same frame and can be compared directly.
+    if angle_override is None:
+        angle = estimate_dominant_angle(grid, resolution)
+        print(f"Dominant wall angle: {angle:.2f} degrees")
+    else:
+        angle = float(angle_override)
+        print(f"Using given wall angle: {angle:.2f} degrees")
 
     identity = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     if abs(angle) < skip_below_deg:

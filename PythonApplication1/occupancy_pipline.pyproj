@@ -22,6 +22,9 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="FPUNet_cleaner.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="hough_detection.py" />
     <Compile Include="main.py" />
     <Compile Include="occupancy_cleaner.py" />
