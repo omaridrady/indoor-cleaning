@@ -42,9 +42,9 @@ rosbag2_bagfile_information:
   compression_format: ""
   compression_mode: ""
   relative_file_paths:
-    - run6_0.mcap
+    - KASIT_3rd_floor.mcap
   files:
-    - path: run6_0.mcap
+    - path: KASIT_3rd_floor.mcap
       starting_time:
         nanoseconds_since_epoch: 1793778204558018978
       duration:
