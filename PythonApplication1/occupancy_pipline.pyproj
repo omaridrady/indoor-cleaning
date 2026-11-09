@@ -31,6 +31,7 @@
     <Compile Include="room_polygon_builder.py" />
     <Compile Include="ros_bag_reader.py" />
     <Compile Include="test_file.py" />
+    <Compile Include="vector_export.py" />
     <Compile Include="wall_line_processing.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />

@@ -22,13 +22,20 @@ from room_polygon_builder import (
     build_room_polygons,
     plot_clean_vector_map,
 )
+from vector_export import merge_walls, export_floorplan
 
 # ============================================================
 # SETTINGS
 # ============================================================
 
 # The SLAM map (.yaml; the .pgm it points to must be next to it)
-BAG_PATH = r"D:\rosbag\PythonApplication1\data\run5_slam_map.yaml"
+BAG_PATH = r"D:\rosbag\PythonApplication1\data\KASIT_3rd_floor\KASIT_3rd_floor_slam_map.yaml"
+
+# Every result file goes to OUTPUT_ROOT\<map name>, never into this code folder.
+# The map name is the .yaml file name without "_slam_map", e.g.
+#   data\run5\run5_slam_map.yaml                       -> outputs\run5
+#   data\KASIT_3rd_floor\KASIT_3rd_floor_slam_map.yaml -> outputs\KASIT_3rd_floor
+OUTPUT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "outputs")
 
 # Trained FPUNet weights (.pth). FPUNet.py must be in this project folder.
 # If this file is missing, the pipeline still runs with the classic cleaner only.
@@ -39,13 +46,23 @@ FPUNET_WEIGHTS_PATH = r"D:\rosbag\best_fpunet_128_10.pth"
 # False = print a warning and continue with the classic cleaner only.
 REQUIRE_FPUNET = True
 
-SHOW_DEBUG_PLOTS = False        # per-approach wall mask + wall line plots
+MERGE_WALLS = True              # join broken walls + drop isolated stubs (see vector_export.py)
+SHOW_DEBUG_PLOTS = False       # per-approach wall mask + wall line plots
 SHOW_INDIVIDUAL_MAPS = False    # extra single-map windows (the side-by-side figure already shows both)
 
 
 # ============================================================
 # HELPERS
 # ============================================================
+
+def output_dir_for(map_yaml):
+    name = os.path.splitext(os.path.basename(map_yaml))[0]
+    if name.endswith("_slam_map"):
+        name = name[: -len("_slam_map")]
+    path = os.path.abspath(os.path.join(OUTPUT_ROOT, name))
+    os.makedirs(path, exist_ok=True)
+    return path
+
 
 def save_lines(path, lines):
     data = [[l["x1"], l["y1"], l["x2"], l["y2"],
@@ -54,7 +71,7 @@ def save_lines(path, lines):
     np.save(path, np.asarray(data, dtype=float))
 
 
-def run_vector_pipeline(label, grid, resolution, angle):
+def run_vector_pipeline(label, grid, resolution, angle, map_origin):
     """
     Align -> wall lines -> corner snapping, for one cleaned grid.
     `angle` is shared by both approaches so their results are in the same frame.
@@ -80,8 +97,18 @@ def run_vector_pipeline(label, grid, resolution, angle):
     snapped = build_room_polygons(
         aligned_grid, wall_lines, resolution=resolution, save_result=False
     )
-    save_lines(f"snapped_wall_lines_{label}.npy", snapped)
     print(f"{label}: snapped wall segments = {len(snapped)}")
+
+    # Join broken / duplicate walls into long ones, drop tiny isolated stubs.
+    if MERGE_WALLS:
+        snapped = merge_walls(snapped, resolution)
+    save_lines(f"snapped_wall_lines_{label}.npy", snapped)
+
+    # Vector file for the app (aligned frame, meters)
+    export_floorplan(
+        snapped, resolution, align_M, map_origin, rotation_deg,
+        base_name=f"floorplan_{label}", source_name=os.path.basename(BAG_PATH)
+    )
 
     return {
         "aligned_grid": aligned_grid,
@@ -190,9 +217,10 @@ def main():
     # both approaches, so both blueprints share one coordinate frame.
     angle = estimate_dominant_angle(classic_grid, resolution)
 
-    results = {"classic": run_vector_pipeline("classic", classic_grid, resolution, angle)}
+    origin = (min_x, min_y)
+    results = {"classic": run_vector_pipeline("classic", classic_grid, resolution, angle, origin)}
     if fpunet_grid is not None:
-        results["fpunet"] = run_vector_pipeline("fpunet", fpunet_grid, resolution, angle)
+        results["fpunet"] = run_vector_pipeline("fpunet", fpunet_grid, resolution, angle, origin)
 
     # ========================================================
     # STEP 6: compare the blueprints
@@ -232,4 +260,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # The pipeline modules save their files to the current folder, so run
+    # inside the map's output folder and come back afterwards.
+    out_dir = output_dir_for(BAG_PATH)
+    start_dir = os.getcwd()
+    os.chdir(out_dir)
+    try:
+        print(f"Output folder: {out_dir}")
+        main()
+    finally:
+        os.chdir(start_dir)

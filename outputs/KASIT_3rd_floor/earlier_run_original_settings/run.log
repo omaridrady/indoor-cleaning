@@ -1,0 +1,237 @@
+﻿python : D:\rosbag\PythonApplication1\PythonApplication1\FPUNet_cleaner.py:221: UserWarning: FigureCanvasAgg is 
+non-interactive, and thus cannot be shown
+At line:1 char:505
++ ... StartNew(); python D:\rosbag\PythonApplication1\PythonApplication1\ma ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (D:\rosbag\Pytho...cannot be shown:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  plt.show()
+D:\rosbag\PythonApplication1\PythonApplication1\FPUNet_cleaner.py:265: UserWarning: FigureCanvasAgg is 
+non-interactive, and thus cannot be shown
+  plt.show()
+==============================================
+INDOOR FLOOR PLAN PROCESSING PIPELINE
+==============================================
+
+STEP 1: Loading SLAM map...
+Loading SLAM map metadata from: D:\rosbag\PythonApplication1\data\KASIT_3rd_floor\KASIT_3rd_floor_slam_map.yaml
+Loading SLAM map image from: D:\rosbag\PythonApplication1\data\KASIT_3rd_floor\KASIT_3rd_floor_slam_map.pgm
+Grid: 1072 x 2532 cells (53.6 m x 126.6 m), res=0.05000000074505806 m/cell, origin=(-50.91, -13.73)
+Unknown 85.1% | Free 13.9% | Occupied 1.0%
+Grid shape: (2532, 1072)
+Resolution: 0.05000000074505806 m/cell
+
+STEP 2: Cleaning with the classic filters...
+Resolution: 0.05000000074505806 m/cell -> speck<8px, closing=3px, thicken=1px, min component extent=10.0px
+1. Removing isolated wall pixels...
+2. Removing specks before they can fuse to walls...
+3. Bridging small gaps (closing)...
+4. Discarding short isolated pieces...
+Wall pixels: 27278 raw -> 27452 cleaned
+
+STEP 3: Cleaning with FPUNet...
+Loaded FPUNet on cpu.
+FPUNet: 0.05000000074505806 m/cell -> 0.20 m cells (268 x 633), running model...
+FPUNet erased 1831 of 27278 wall pixels (6.7%).
+
+STEP 4: Showing the cleaning results...
+Saved: cleaning_comparison.png
+
+##############################################
+VECTORIZING: classic
+##############################################
+Using given wall angle: 7.66 degrees
+Rotated grid from 1072x2532 to 1401x2653 cells
+
+==============================================
+WALL LINE PROCESSING (CONTOUR APPROXIMATION)
+==============================================
+1. Extracting wall mask...
+2. Finding wall contours...
+3. Running Douglas-Peucker Polygon Approximation...
+Raw polygon segments extracted: 429
+Horizontal-family candidates: 177
+Vertical-family candidates: 252
+Clustering and merging horizontal walls...
+Clustering and merging vertical walls...
+
+==============================================
+FINAL WALL LINE RESULT
+==============================================
+Final wall lines: 155
+ 1. Length = 49.30 m, Angle = 90.00°, Family = vertical
+ 2. Length = 27.10 m, Angle = 90.00°, Family = vertical
+ 3. Length = 19.60 m, Angle = 90.00°, Family = vertical
+ 4. Length = 18.55 m, Angle = 90.00°, Family = vertical
+ 5. Length = 17.45 m, Angle = 90.00°, Family = vertical
+ 6. Length = 16.14 m, Angle = 90.00°, Family = vertical
+ 7. Length = 15.50 m, Angle = 0.00°, Family = horizontal
+ 8. Length = 14.05 m, Angle = 90.00°, Family = vertical
+ 9. Length = 12.40 m, Angle = 0.00°, Family = horizontal
+10. Length = 12.25 m, Angle = 90.00°, Family = vertical
+11. Length = 11.50 m, Angle = 90.00°, Family = vertical
+12. Length = 8.25 m, Angle = 90.00°, Family = vertical
+13. Length = 8.00 m, Angle = 90.00°, Family = vertical
+14. Length = 7.85 m, Angle = 90.00°, Family = vertical
+15. Length = 7.80 m, Angle = 0.00°, Family = horizontal
+16. Length = 7.50 m, Angle = 90.00°, Family = vertical
+17. Length = 7.14 m, Angle = 90.00°, Family = vertical
+18. Length = 7.00 m, Angle = 0.00°, Family = horizontal
+19. Length = 6.80 m, Angle = 0.00°, Family = horizontal
+20. Length = 6.30 m, Angle = 90.00°, Family = vertical
+21. Length = 6.11 m, Angle = 90.00°, Family = vertical
+22. Length = 5.25 m, Angle = 90.00°, Family = vertical
+23. Length = 5.25 m, Angle = 0.00°, Family = horizontal
+24. Length = 5.20 m, Angle = 90.00°, Family = vertical
+25. Length = 5.05 m, Angle = 90.00°, Family = vertical
+26. Length = 4.85 m, Angle = 90.00°, Family = vertical
+27. Length = 4.85 m, Angle = 90.00°, Family = vertical
+28. Length = 4.80 m, Angle = 90.00°, Family = vertical
+29. Length = 4.45 m, Angle = 0.00°, Family = horizontal
+30. Length = 4.10 m, Angle = 90.00°, Family = vertical
+31. Length = 3.51 m, Angle = 90.00°, Family = vertical
+32. Length = 3.50 m, Angle = 0.00°, Family = horizontal
+33. Length = 3.45 m, Angle = 90.00°, Family = vertical
+34. Length = 3.35 m, Angle = 90.00°, Family = vertical
+35. Length = 3.30 m, Angle = 0.00°, Family = horizontal
+36. Length = 3.20 m, Angle = 90.00°, Family = vertical
+37. Length = 2.99 m, Angle = 0.00°, Family = horizontal
+38. Length = 2.45 m, Angle = 0.00°, Family = horizontal
+39. Length = 2.31 m, Angle = 90.00°, Family = vertical
+40. Length = 2.25 m, Angle = 0.00°, Family = horizontal
+41. Length = 2.16 m, Angle = 0.00°, Family = horizontal
+42. Length = 2.05 m, Angle = 90.00°, Family = vertical
+43. Length = 2.00 m, Angle = 90.00°, Family = vertical
+44. Length = 1.90 m, Angle = 0.00°, Family = horizontal
+45. Length = 1.85 m, Angle = 0.00°, Family = horizontal
+46. Length = 1.80 m, Angle = 90.00°, Family = vertical
+47. Length = 1.75 m, Angle = 0.00°, Family = horizontal
+48. Length = 1.70 m, Angle = 0.00°, Family = horizontal
+49. Length = 1.61 m, Angle = 0.00°, Family = horizontal
+50. Length = 1.60 m, Angle = 0.00°, Family = horizontal
+classic: final wall candidates = 155
+
+==============================================
+ROOM CONSTRUCTION & CORNER SNAPPING
+==============================================
+
+1. Snapping endpoints via orthogonal intersections...
+Wall segments after geometric snapping: 146
+
+Room construction processing finished.
+classic: snapped wall segments = 146
+Merged walls: 146 -> 117 segments
+Exported 117 walls (46.2 x 115.2 m): floorplan_classic.json / .geojson / .svg
+
+##############################################
+VECTORIZING: fpunet
+##############################################
+Using given wall angle: 7.66 degrees
+Rotated grid from 1072x2532 to 1401x2653 cells
+
+==============================================
+WALL LINE PROCESSING (CONTOUR APPROXIMATION)
+==============================================
+1. Extracting wall mask...
+2. Finding wall contours...
+3. Running Douglas-Peucker Polygon Approximation...
+Raw polygon segments extracted: 421
+Horizontal-family candidates: 149
+Vertical-family candidates: 272
+Clustering and merging horizontal walls...
+Clustering and merging vertical walls...
+
+==============================================
+FINAL WALL LINE RESULT
+==============================================
+Final wall lines: 140
+ 1. Length = 54.00 m, Angle = 90.00°, Family = vertical
+ 2. Length = 27.10 m, Angle = 90.00°, Family = vertical
+ 3. Length = 19.61 m, Angle = 90.00°, Family = vertical
+ 4. Length = 17.45 m, Angle = 90.00°, Family = vertical
+ 5. Length = 15.49 m, Angle = 0.00°, Family = horizontal
+ 6. Length = 15.03 m, Angle = 90.00°, Family = vertical
+ 7. Length = 12.55 m, Angle = 0.00°, Family = horizontal
+ 8. Length = 12.25 m, Angle = 90.00°, Family = vertical
+ 9. Length = 11.50 m, Angle = 90.00°, Family = vertical
+10. Length = 10.05 m, Angle = 90.00°, Family = vertical
+11. Length = 8.25 m, Angle = 90.00°, Family = vertical
+12. Length = 8.00 m, Angle = 90.00°, Family = vertical
+13. Length = 7.85 m, Angle = 90.00°, Family = vertical
+14. Length = 7.80 m, Angle = 0.00°, Family = horizontal
+15. Length = 7.14 m, Angle = 90.00°, Family = vertical
+16. Length = 7.05 m, Angle = 0.00°, Family = horizontal
+17. Length = 7.00 m, Angle = 90.00°, Family = vertical
+18. Length = 6.85 m, Angle = 0.00°, Family = horizontal
+19. Length = 6.30 m, Angle = 90.00°, Family = vertical
+20. Length = 6.20 m, Angle = 90.00°, Family = vertical
+21. Length = 5.60 m, Angle = 90.00°, Family = vertical
+22. Length = 5.30 m, Angle = 90.00°, Family = vertical
+23. Length = 5.25 m, Angle = 0.00°, Family = horizontal
+24. Length = 5.20 m, Angle = 90.00°, Family = vertical
+25. Length = 5.05 m, Angle = 90.00°, Family = vertical
+26. Length = 4.85 m, Angle = 90.00°, Family = vertical
+27. Length = 4.55 m, Angle = 90.00°, Family = vertical
+28. Length = 4.54 m, Angle = 90.00°, Family = vertical
+29. Length = 4.30 m, Angle = 90.00°, Family = vertical
+30. Length = 4.25 m, Angle = 90.00°, Family = vertical
+31. Length = 4.05 m, Angle = 0.00°, Family = horizontal
+32. Length = 3.90 m, Angle = 90.00°, Family = vertical
+33. Length = 3.60 m, Angle = 90.00°, Family = vertical
+34. Length = 3.51 m, Angle = 90.00°, Family = vertical
+35. Length = 3.50 m, Angle = 0.00°, Family = horizontal
+36. Length = 3.35 m, Angle = 90.00°, Family = vertical
+37. Length = 3.30 m, Angle = 0.00°, Family = horizontal
+38. Length = 3.20 m, Angle = 90.00°, Family = vertical
+39. Length = 2.99 m, Angle = 0.00°, Family = horizontal
+40. Length = 2.45 m, Angle = 0.00°, Family = horizontal
+41. Length = 2.31 m, Angle = 90.00°, Family = vertical
+42. Length = 2.20 m, Angle = 90.00°, Family = vertical
+43. Length = 2.16 m, Angle = 0.00°, Family = horizontal
+44. Length = 2.05 m, Angle = 90.00°, Family = vertical
+45. Length = 1.85 m, Angle = 0.00°, Family = horizontal
+46. Length = 1.85 m, Angle = 0.00°, Family = horizontal
+47. Length = 1.80 m, Angle = 0.00°, Family = horizontal
+48. Length = 1.80 m, Angle = 90.00°, Family = vertical
+49. Length = 1.80 m, Angle = 90.00°, Family = vertical
+50. Length = 1.70 m, Angle = 90.00°, Family = vertical
+fpunet: final wall candidates = 140
+
+==============================================
+ROOM CONSTRUCTION & CORNER SNAPPING
+==============================================
+
+1. Snapping endpoints via orthogonal intersections...
+Wall segments after geometric snapping: 131
+
+Room construction processing finished.
+fpunet: snapped wall segments = 131
+Merged walls: 131 -> 107 segments
+Exported 107 walls (46.2 x 115.2 m): floorplan_fpunet.json / .geojson / .svg
+
+STEP 6: Comparing the final blueprints...
+
+==============================================
+COMPARISON OF THE TWO APPROACHES
+==============================================
+                                   classic        fpunet
+wall segments                          117           107
+total wall length (m)                457.7         439.1
+classic walls found in fpunet         92.8%
+fpunet walls found in classic         95.6%
+(a wall counts as 'found' if it lies within 0.3 m of a wall from the other approach)
+Where the two disagree is where to look at the plots: that is where one of them
+kept furniture/noise, or removed a real wall.
+Saved: vector_comparison.png
+
+==============================================
+PROCESSING FINISHED
+==============================================
+Generated files:
+  occupancy_grid_cleaned.npy
+  snapped_wall_lines_classic.npy
+  vector_floor_plan_classic.png
+  snapped_wall_lines_fpunet.npy
+  vector_floor_plan_fpunet.png
+  occupancy_grid_fpunet.npy

@@ -14,7 +14,7 @@ SNAP_TOLERANCE_METERS = 0.3
 # Minimum final wall length to keep after snapping.
 # Matches MIN_WALL_LENGTH_METERS in wall_line_processing.py, so this stage does
 # not silently drop walls the previous stage accepted.
-MIN_SNAPPED_LENGTH_METERS = 0.6
+MIN_SNAPPED_LENGTH_METERS = 0.5
 
 
 # ============================================================

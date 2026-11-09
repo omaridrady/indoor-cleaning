@@ -1,4 +1,4 @@
-image: run6_slam_map.pgm
+image: KASIT_3rd_floor_slam_map.pgm
 resolution: 0.05000000074505806
 origin: [-50.9137253816417, -13.731749197723142, 0.0]
 negate: 0

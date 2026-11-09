@@ -11,22 +11,28 @@ import matplotlib.pyplot as plt
 # (Previously a fraction of each contour's perimeter, which made the
 # tolerance depend on how big the connected wall region was.)
 # Lower = more detailed vertices, higher = smoother/stricter lines.
-DP_EPSILON_METERS = 0.15
+DP_EPSILON_METERS = 0.08
 
 # Wall filtering
-MIN_WALL_LENGTH_METERS = 0.6
+MIN_WALL_LENGTH_METERS = 0.5
 
 # Parallel line clustering & merging
-MAX_PARALLEL_DISTANCE_METERS = 0.5
-MAX_MERGE_GAP_METERS = 0.5
+MAX_PARALLEL_DISTANCE_METERS = 0.2
+MAX_MERGE_GAP_METERS = 0.3
 MAX_PARALLEL_ANGLE_DEGREES = 12.0
 
 # Duplicate suppression: a shorter parallel line is removed only if at least
 # this fraction of it overlaps a longer, already-kept line.
-DUPLICATE_OVERLAP_RATIO = 0.5
+DUPLICATE_OVERLAP_RATIO = 0.7
 
 # Alignment: skip the rotation if the map is already this close to axis-aligned.
 ALIGN_SKIP_BELOW_DEG = 1.0
+
+# Alignment has its own constants so tuning the line extraction above can never
+# change the rotation. Do not tune these: the alignment was checked against the
+# real floor.
+ALIGN_DP_EPSILON_METERS = 0.15
+ALIGN_MIN_WALL_LENGTH_METERS = 0.6
 
 
 # ============================================================
@@ -60,7 +66,7 @@ def estimate_dominant_angle(grid, resolution):
 
     sx = 0.0
     sy = 0.0
-    epsilon = DP_EPSILON_METERS / resolution
+    epsilon = ALIGN_DP_EPSILON_METERS / resolution
 
     for cnt in contours:
         approx = cv2.approxPolyDP(cnt, epsilon, True)
@@ -72,7 +78,7 @@ def estimate_dominant_angle(grid, resolution):
             p2 = approx[(i + 1) % n][0].astype(float)
             d = p2 - p1
             length = float(np.hypot(d[0], d[1]))
-            if length * resolution < MIN_WALL_LENGTH_METERS:
+            if length * resolution < ALIGN_MIN_WALL_LENGTH_METERS:
                 continue
             a = np.arctan2(d[1], d[0])
             # Multiplying the angle by 4 makes 0, 90, 180 and 270 degrees all
@@ -244,18 +250,24 @@ def can_merge_segments(line1, line2, family, resolution):
 
 
 def fit_merged_line(lines, family, resolution):
+    # Endpoints are weighted by their segment's length, so a short stub cannot
+    # pull a long wall away from where the scans put it.
     points = []
+    weights = []
     for line in lines:
+        length = max(line["length_pixels"], 1e-6)
         points.append([line["x1"], line["y1"]])
         points.append([line["x2"], line["y2"]])
+        weights.extend([length, length])
     points = np.asarray(points, dtype=float)
+    weights = np.asarray(weights, dtype=float)
 
     if len(points) < 2:
         return None
 
-    center = np.mean(points, axis=0)
+    center = np.average(points, axis=0, weights=weights)
     centered = points - center
-    covariance = np.cov(centered.T)
+    covariance = (centered * weights[:, None]).T @ centered / weights.sum()
     eigenvalues, eigenvectors = np.linalg.eigh(covariance)
     direction = eigenvectors[:, np.argmax(eigenvalues)]
 
