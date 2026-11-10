@@ -1,0 +1,54 @@
+rosbag2_bagfile_information:
+  version: 9
+  storage_identifier: mcap
+  duration:
+    nanoseconds: 1598123476406
+  starting_time:
+    nanoseconds_since_epoch: 1794224186123421166
+  message_count: 63972
+  topics_with_message_count:
+    - topic_metadata:
+        name: /tf
+        type: tf2_msgs/msg/TFMessage
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: ""
+      message_count: 15993
+    - topic_metadata:
+        name: /lidar_odom
+        type: nav_msgs/msg/Odometry
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: ""
+      message_count: 15993
+    - topic_metadata:
+        name: /lidar_delta
+        type: geometry_msgs/msg/TransformStamped
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: ""
+      message_count: 15993
+    - topic_metadata:
+        name: /scan
+        type: sensor_msgs/msg/LaserScan
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: ""
+      message_count: 15993
+  compression_format: ""
+  compression_mode: ""
+  relative_file_paths:
+    - KASIT_2nd_floor_slam_0.mcap
+  files:
+    - path: KASIT_2nd_floor_slam_0.mcap
+      starting_time:
+        nanoseconds_since_epoch: 1794224186123421166
+      duration:
+        nanoseconds: 1598123476406
+      message_count: 127944
+  custom_data: ~
+  ros_distro: jazzy
