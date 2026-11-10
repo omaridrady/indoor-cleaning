@@ -1,0 +1,6 @@
+image: run4_slam_map.pgm
+resolution: 0.05000000074505806
+origin: [-13.024867168298318, -6.789927464632351, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25

@@ -5,17 +5,55 @@ import matplotlib.pyplot as plt
 # CONFIGURATION
 # ============================================================
 
-# Maximum distance for an endpoint to snap to an intersecting perpendicular wall
-# 0.8 meters = 16 pixels at 0.05 m/cell resolution
-SNAP_TOLERANCE_METERS = 0.8
+# Maximum distance for an endpoint to snap to a perpendicular wall.
+# Kept well below a doorway width (~0.8-0.9 m): a larger value would extend
+# walls across door openings and hide them from the later door-detection stage.
+# If real corners are left open, raise this slowly (try 0.4).
+SNAP_TOLERANCE_METERS = 0.3
 
-# Minimum final wall length to keep after adjustment
-MIN_SNAPPED_LENGTH_METERS = 0.8
+# Minimum final wall length to keep after snapping.
+# Matches MIN_WALL_LENGTH_METERS in wall_line_processing.py, so this stage does
+# not silently drop walls the previous stage accepted.
+MIN_SNAPPED_LENGTH_METERS = 0.5
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def _line_family(line):
+    """Returns 'horizontal' or 'vertical' (in the aligned grid frame)."""
+    family = line.get("family")
+    if family in ("horizontal", "vertical"):
+        return family
+    angle = line["angle_degrees"] % 180.0
+    return "horizontal" if min(angle, 180.0 - angle) <= 45.0 else "vertical"
+
+
+def _make_line(x1, y1, x2, y2, family, resolution):
+    """Builds a line dict, or returns None if it is too short to keep."""
+    length_pixels = float(np.hypot(x2 - x1, y2 - y1))
+    length_meters = length_pixels * resolution
+    if length_meters < MIN_SNAPPED_LENGTH_METERS:
+        return None
+
+    angle_degrees = float(np.degrees(np.arctan2(y2 - y1, x2 - x1)) % 180.0)
+    return {
+        "x1": float(x1),
+        "y1": float(y1),
+        "x2": float(x2),
+        "y2": float(y2),
+        "length_pixels": length_pixels,
+        "length_meters": float(length_meters),
+        "angle_degrees": angle_degrees,
+        "family": family
+    }
 
 
 # ============================================================
 # ORTHOGONAL INTERSECTION SNAPPING
 # ============================================================
+
 def plot_clean_vector_map(aligned_grid, snapped_lines, save_path="vector_floor_plan.png"):
     """
     Renders a CAD-style vector map:
@@ -59,84 +97,78 @@ def plot_clean_vector_map(aligned_grid, snapped_lines, save_path="vector_floor_p
     plt.show()
     print(f"Saved vector map image: {save_path}")
 
+
 def snap_wall_endpoints(wall_lines, resolution=0.05):
     """
-    Snaps wall endpoints strictly to true orthogonal intersections (L-corners and T-junctions)
-    rather than blind point averaging, preserving structural accuracy.
+    Snaps wall endpoints to true orthogonal intersections (L-corners and
+    T-junctions).
+
+    Each endpoint moves to the NEAREST perpendicular wall within
+    SNAP_TOLERANCE_METERS, provided that wall actually spans the endpoint's
+    position. All decisions are made from the original geometry, so the result
+    does not depend on the order lines are processed in, and an endpoint can
+    never be dragged along a chain of walls.
+
+    Input lines must already be axis-aligned (horizontal/vertical) in the
+    aligned grid frame, as produced by wall_line_processing.py.
     """
     if not wall_lines:
         return []
 
-    # Create mutable copies of the lines
-    lines = [dict(l) for l in wall_lines]
+    snap = SNAP_TOLERANCE_METERS / resolution
 
-    # Separate into horizontal and vertical families based on angle
-    snap_pixels = SNAP_TOLERANCE_METERS / resolution
-    horiz_lines = []
-    vert_lines = []
-    for l in lines:
-        angle = l["angle_degrees"]
-        if abs(angle - 90.0) < 25.0 or abs(angle + 90.0) < 25.0:
-            vert_lines.append(l)
+    # Normalize every line to: fixed position, start/end along its own axis
+    horiz = []   # y position, x extent
+    vert = []    # x position, y extent
+    for l in wall_lines:
+        if _line_family(l) == "horizontal":
+            horiz.append({
+                "pos": (l["y1"] + l["y2"]) / 2.0,
+                "lo": min(l["x1"], l["x2"]),
+                "hi": max(l["x1"], l["x2"]),
+            })
         else:
-            horiz_lines.append(l)
+            vert.append({
+                "pos": (l["x1"] + l["x2"]) / 2.0,
+                "lo": min(l["y1"], l["y2"]),
+                "hi": max(l["y1"], l["y2"]),
+            })
 
-    # Check every horizontal and vertical line pair for potential corner intersections
-    for h in horiz_lines:
-        hx1, hx2 = min(h["x1"], h["x2"]), max(h["x1"], h["x2"])
-        hy = (h["y1"] + h["y2"]) / 2.0
+    def snap_endpoint(value, own_pos, partners):
+        """
+        value    : this line's endpoint coordinate along its own axis
+        own_pos  : this line's fixed (perpendicular) coordinate
+        partners : perpendicular walls it may snap to
+        """
+        best_pos = None
+        best_dist = snap
+        for p in partners:
+            d = abs(p["pos"] - value)
+            if d > best_dist:
+                continue
+            # The partner must actually span this line's position
+            if p["lo"] - snap <= own_pos <= p["hi"] + snap:
+                best_pos = p["pos"]
+                best_dist = d
+        return value if best_pos is None else best_pos
 
-        for v in vert_lines:
-            vx = (v["x1"] + v["x2"]) / 2.0
-            vy1, vy2 = min(v["y1"], v["y2"]), max(v["y1"], v["y2"])
+    snapped = []
 
-            # Theoretical intersection of this horizontal and vertical line is at (vx, hy)
-            # Check if this intersection falls on or near both segments
-            if (hx1 - snap_pixels <= vx <= hx2 + snap_pixels) and (vy1 - snap_pixels <= hy <= vy2 + snap_pixels):
-                
-                # Snap horizontal line endpoints to intersection X coordinate if close
-                if abs(h["x1"] - vx) <= snap_pixels:
-                    h["x1"] = vx
-                elif abs(h["x2"] - vx) <= snap_pixels:
-                    h["x2"] = vx
+    for h in horiz:
+        x1 = snap_endpoint(h["lo"], h["pos"], vert)
+        x2 = snap_endpoint(h["hi"], h["pos"], vert)
+        line = _make_line(min(x1, x2), h["pos"], max(x1, x2), h["pos"], "horizontal", resolution)
+        if line is not None:
+            snapped.append(line)
 
-                # Snap vertical line endpoints to intersection Y coordinate if close
-                if abs(v["y1"] - hy) <= snap_pixels:
-                    v["y1"] = hy
-                elif abs(v["y2"] - hy) <= snap_pixels:
-                    v["y2"] = hy
+    for v in vert:
+        y1 = snap_endpoint(v["lo"], v["pos"], horiz)
+        y2 = snap_endpoint(v["hi"], v["pos"], horiz)
+        line = _make_line(v["pos"], min(y1, y2), v["pos"], max(y1, y2), "vertical", resolution)
+        if line is not None:
+            snapped.append(line)
 
-    # Recombine and recalculate properties for all lines
-    all_updated = horiz_lines + vert_lines
-    final_snapped_lines = []
-
-    for l in all_updated:
-        x1, y1 = l["x1"], l["y1"]
-        x2, y2 = l["x2"], l["y2"]
-
-        dx = x2 - x1
-        dy = y2 - y1
-        length_pixels = np.hypot(dx, dy)
-        length_meters = length_pixels * resolution
-
-        # Drop lines that collapsed or became too short
-        if length_meters < MIN_SNAPPED_LENGTH_METERS:
-            continue
-
-        angle_degrees = np.degrees(np.arctan2(dy, dx)) % 180.0
-
-        final_snapped_lines.append({
-            "x1": float(x1),
-            "y1": float(y1),
-            "x2": float(x2),
-            "y2": float(y2),
-            "length_pixels": float(length_pixels),
-            "length_meters": float(length_meters),
-            "angle_degrees": float(angle_degrees),
-            "family": l.get("family", "horizontal")
-        })
-
-    return final_snapped_lines
+    return snapped
 
 
 # ============================================================
