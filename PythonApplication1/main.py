@@ -23,6 +23,13 @@ from room_polygon_builder import (
     plot_clean_vector_map,
 )
 from vector_export import merge_walls, export_floorplan
+from door_outline_prototype import (
+    outline as build_outline,
+    export as export_outline,
+    plot_vector_panels,
+    doors_closeup,
+    count_stretches,
+)
 
 # ============================================================
 # SETTINGS
@@ -49,6 +56,12 @@ REQUIRE_FPUNET = True
 MERGE_WALLS = True              # join broken walls + drop isolated stubs (see vector_export.py)
 SHOW_DEBUG_PLOTS = False       # per-approach wall mask + wall line plots
 SHOW_INDIVIDUAL_MAPS = False    # extra single-map windows (the side-by-side figure already shows both)
+
+# Third result: outline of the explored free space as ONE closed border, with
+# doors / wide openings left open (beam-fan rule, see door_outline_prototype.py).
+# It is built from the FPUNet grid (the classic grid if FPUNet was skipped) and
+# appears as the third panel of the vector figure. False = previous behaviour.
+MAKE_OUTLINE = True
 
 
 # ============================================================
@@ -223,6 +236,33 @@ def main():
         results["fpunet"] = run_vector_pipeline("fpunet", fpunet_grid, resolution, angle, origin)
 
     # ========================================================
+    # STEP 5b: third result - free-space outline with doors
+    # ========================================================
+    # Uses the aligned grid and rotation STEP 5 already made; classic and
+    # FPUNet results above are not touched.
+    outline_lines = None
+    outline_src = "fpunet" if "fpunet" in results else "classic"
+    if MAKE_OUTLINE:
+        print()
+        print("##############################################")
+        print(f"OUTLINE WITH DOORS: {outline_src}")
+        print("##############################################")
+        r = results[outline_src]
+        raw_aligned, _, _ = align_grid_to_walls(raw_grid, resolution, angle_override=angle)
+        outline_lines, _, _, _ = build_outline(r["aligned_grid"], raw_aligned, resolution)
+        export_outline(
+            outline_lines, resolution, r["align_M"], origin, r["rotation_deg"],
+            "floorplan_outline", source_name=os.path.basename(BAG_PATH), cleaner=outline_src
+        )
+        doors_closeup(raw_aligned, outline_lines, resolution)
+        lengths = {k: sum(l["length_meters"] for l in outline_lines if l["kind"] == k)
+                   for k in ("wall", "door", "opening", "unseen")}
+        print(f"outline: {len(outline_lines)} segments in one closed border, "
+              f"{count_stretches(outline_lines, 'door')} doors, "
+              f"{count_stretches(outline_lines, 'opening')} wide openings")
+        print("outline lengths (m): " + ", ".join(f"{k} {v:.1f}" for k, v in lengths.items()))
+
+    # ========================================================
     # STEP 6: compare the blueprints
     # ========================================================
     print()
@@ -231,10 +271,20 @@ def main():
     if "fpunet" in results:
         c, f = results["classic"], results["fpunet"]
         compare_line_sets(c["snapped"], "classic", f["snapped"], "fpunet", resolution)
-        plot_vector_comparison(
-            c["aligned_grid"], c["snapped"], "Classic cleaning",
-            f["aligned_grid"], f["snapped"], "FPUNet cleaning"
-        )
+        if outline_lines is None:
+            plot_vector_comparison(
+                c["aligned_grid"], c["snapped"], "Classic cleaning",
+                f["aligned_grid"], f["snapped"], "FPUNet cleaning"
+            )
+
+    if outline_lines is not None:
+        # Same two panels as before, plus the outline as the third one.
+        panels = [(results["classic"]["aligned_grid"], results["classic"]["snapped"], "Classic cleaning", "cad")]
+        if "fpunet" in results:
+            panels.append((results["fpunet"]["aligned_grid"], results["fpunet"]["snapped"], "FPUNet cleaning", "cad"))
+        panels.append((results[outline_src]["aligned_grid"], outline_lines,
+                       f"Outline with doors ({outline_src})", "outline"))
+        plot_vector_panels(panels)
 
     if SHOW_INDIVIDUAL_MAPS:
         for label, r in results.items():
@@ -257,6 +307,10 @@ def main():
         print(f"  vector_floor_plan_{label}.png")
     if fpunet_grid is not None:
         print("  occupancy_grid_fpunet.npy")
+    if outline_lines is not None:
+        print("  floorplan_outline.json / .geojson / .svg")
+        print("  doors_closeup.png")
+        print("  vector_comparison.png (3 panels)")
 
 
 if __name__ == "__main__":
