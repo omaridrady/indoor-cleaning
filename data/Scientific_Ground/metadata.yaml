@@ -1,0 +1,54 @@
+rosbag2_bagfile_information:
+  version: 9
+  storage_identifier: mcap
+  duration:
+    nanoseconds: 448725078161
+  starting_time:
+    nanoseconds_since_epoch: 1794399555066173323
+  message_count: 17968
+  topics_with_message_count:
+    - topic_metadata:
+        name: /tf
+        type: tf2_msgs/msg/TFMessage
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: ""
+      message_count: 4492
+    - topic_metadata:
+        name: /lidar_odom
+        type: nav_msgs/msg/Odometry
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: ""
+      message_count: 4492
+    - topic_metadata:
+        name: /lidar_delta
+        type: geometry_msgs/msg/TransformStamped
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: ""
+      message_count: 4492
+    - topic_metadata:
+        name: /scan
+        type: sensor_msgs/msg/LaserScan
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: ""
+      message_count: 4492
+  compression_format: ""
+  compression_mode: ""
+  relative_file_paths:
+    - Scientific_Ground.mcap
+  files:
+    - path: Scientific_Ground.mcap
+      starting_time:
+        nanoseconds_since_epoch: 1794399555066173323
+      duration:
+        nanoseconds: 448725078161
+      message_count: 35936
+  custom_data: ~
+  ros_distro: jazzy
