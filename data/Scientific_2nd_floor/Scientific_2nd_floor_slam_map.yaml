@@ -1,0 +1,6 @@
+image: Scientific_2nd_floor_slam_map.pgm
+resolution: 0.05000000074505806
+origin: [-2.3973079131594752, -1.2060069236702375, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25
