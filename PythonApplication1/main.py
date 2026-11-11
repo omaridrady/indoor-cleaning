@@ -36,7 +36,7 @@ from door_outline_prototype import (
 # ============================================================
 
 # The SLAM map (.yaml; the .pgm it points to must be next to it)
-BAG_PATH = r"D:\rosbag\PythonApplication1\data\KASIT_3rd_floor\KASIT_3rd_floor_slam_map.yaml"
+BAG_PATH = r"D:\rosbag\PythonApplication1\data\KASIT_1st_floor\KASIT_1st_floor_slam_map.yaml"
 
 # Every result file goes to OUTPUT_ROOT\<map name>, never into this code folder.
 # The map name is the .yaml file name without "_slam_map", e.g.
@@ -257,7 +257,7 @@ def main():
         doors_closeup(raw_aligned, outline_lines, resolution)
         lengths = {k: sum(l["length_meters"] for l in outline_lines if l["kind"] == k)
                    for k in ("wall", "door", "opening", "unseen")}
-        print(f"outline: {len(outline_lines)} segments in one closed border, "
+        print(f"outline: {len(outline_lines)} segments, closed border, "
               f"{count_stretches(outline_lines, 'door')} doors, "
               f"{count_stretches(outline_lines, 'opening')} wide openings")
         print("outline lengths (m): " + ", ".join(f"{k} {v:.1f}" for k, v in lengths.items()))

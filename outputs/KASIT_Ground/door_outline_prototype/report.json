@@ -1,0 +1,53 @@
+{
+  "map": "KASIT_Ground_slam_map.yaml",
+  "cleaner": "fpunet",
+  "rotation_deg": 0.0,
+  "current_vectoriser": {
+    "segments": 167,
+    "separate_pieces": 94,
+    "loose_wall_ends": 200,
+    "wall_length_m": 301.8,
+    "walls_on_scan_data": 0.881,
+    "scan_walls_covered": 0.473
+  },
+  "outline_prototype": {
+    "segments": 443,
+    "separate_pieces": 1,
+    "loose_wall_ends": 0,
+    "polygons": {
+      "outer": 1,
+      "hole": 0
+    },
+    "doors": 5,
+    "door_widths_m": [
+      0.81,
+      1.15,
+      1.31,
+      1.46,
+      1.58
+    ],
+    "door_straight_widths_m": [
+      0.81,
+      1.15,
+      1.31,
+      1.46,
+      1.58
+    ],
+    "wide_openings": 5,
+    "segments_by_kind": {
+      "wall": 384,
+      "door": 5,
+      "opening": 6,
+      "unseen": 48
+    },
+    "length_m": {
+      "wall": 360.2,
+      "door": 6.3,
+      "opening": 12.2,
+      "unseen": 28.1
+    },
+    "walls_on_scan_data": 0.986,
+    "scan_walls_covered": 0.633
+  },
+  "note": "walls_on_scan_data / scan_walls_covered: share within 0.15 m of raw wall pixels. The outline only follows walls that border the explored free space, so walls of rooms the robot never entered are not part of it."
+}

@@ -65,7 +65,7 @@ WALL_NEAR_M = 0.20            # wall pixels this close outside the border -> "wa
 FAN_DEPTH_M = 0.80            # look this far outward for beam streaks -> "fan"
 SMALL_GAP_M = 0.35            # non-wall stretches shorter than this, between walls, are wall breaks
 DOOR_MIN_M, DOOR_MAX_M = 0.60, 1.60   # door width range for the beam-fan rule
-OPENING_MAX_M = 5.0           # widest gap a beam-fan detour may be closed across
+OPENING_MAX_M = 6.0           # widest gap a beam-fan detour may be closed across (double doors)
 POCKET_MIN_FAN = 0.35         # a detour must be at least this fraction beam fan ...
 POCKET_MAX_WALL = 0.50        # ... and at most this fraction wall, to be cut off
 POCKET_STRONG_FAN = 0.60      # detours at least this fraction fan are clearly seen-through: the cut
@@ -122,11 +122,17 @@ def split_free_space(grid, res):
 # ============================================================
 
 def _edge_class(p, q):
+    """
+    "h" / "v" = squared to exactly 0 / 90 degrees, "d" = keeps its real angle.
+    An edge is squared only if it is close to the axis AND squaring it would not move
+    it more than SQUARE_MAX_DRIFT_M: a 13 m wall leaning 1 degree drifts 0.25 m, enough
+    for the drawn line to cross to the wrong side of the wall pixels.
+    """
     a = np.degrees(np.arctan2(q[1] - p[1], q[0] - p[0])) % 180.0
     if min(a, 180.0 - a) <= AXIS_TOL_DEG:
-        return "h"
+        return "h" if abs(q[1] - p[1]) <= SQUARE_DRIFT_PX[0] else "d"
     if abs(a - 90.0) <= AXIS_TOL_DEG:
-        return "v"
+        return "v" if abs(q[0] - p[0]) <= SQUARE_DRIFT_PX[0] else "d"
     return "d"
 
 
@@ -137,6 +143,8 @@ def _dedupe(P):
 
 SPIKE_MAX_M = 1.0             # spikes with a side shorter than this are outline artifacts
 SPIKE_MAX_PX = [20.0]         # set from SPIKE_MAX_M and the map resolution in outline()
+SQUARE_MAX_DRIFT_M = 0.10     # a near-0/90 edge is squared only if its ends differ by at most this
+SQUARE_DRIFT_PX = [2.0]       # set from SQUARE_MAX_DRIFT_M and the map resolution in outline()
 
 
 def _merge_straight(P):
@@ -199,6 +207,34 @@ def _snap(P, wall, res):
     h, w = wall.shape
     s = int(round(SNAP_M / res))
     n = len(P)
+
+    # tilted edges first: slide sideways (along the edge's normal) onto the wall pixels
+    for i in range(n):
+        j = (i + 1) % n
+        if _edge_class(P[i], P[j]) != "d":
+            continue
+        v = P[j] - P[i]
+        L = float(np.hypot(*v))
+        if L < 6:
+            continue
+        nrm = np.array([-v[1], v[0]]) / L
+        base = P[i] + v * np.linspace(0, 1, int(L) + 1)[1:-1, None]
+        offs = list(range(-s - 1, s + 2))
+        hits = np.zeros((len(offs), len(base)), bool)
+        for k, d in enumerate(offs):
+            xy = np.round(base + nrm * d).astype(int)
+            ok = (xy[:, 0] >= 0) & (xy[:, 0] < w) & (xy[:, 1] >= 0) & (xy[:, 1] < h)
+            hits[k, ok] = wall[xy[ok, 1], xy[ok, 0]]
+        best, best_c = 0, 0
+        for d in range(-s, s + 1):
+            k = d + s + 1
+            c = int((hits[k - 1] | hits[k] | hits[k + 1]).sum())
+            if c > best_c or (c == best_c and abs(d) < abs(best)):
+                best, best_c = d, c
+        if best and best_c >= 0.3 * len(base):
+            P[i] = P[i] + nrm * best
+            P[j] = P[j] + nrm * best
+
     for i in range(n):
         j = (i + 1) % n
         cls = _edge_class(P[i], P[j])
@@ -278,6 +314,9 @@ def label_border(V, region, wall, streaks, res):
         for j in range(int(np.ceil(L))):
             s = p + d * j
             hit = False
+            # outward only (plus 1 px inward): looking further inward mislabels the inside of
+            # seen-through rooms as wall and stops doorways being cut. Edges are snapped onto
+            # their wall pixels first (_snap), so the wall is at or just outside the border.
             for t in range(-1, near + 1):
                 for l in (-1, 0, 1):
                     x, y = (s + out * t + lat * l).round().astype(int)
@@ -396,16 +435,15 @@ def find_doors(samples, region, res):
         i = (run[1] + run[2] - 1) % N
         return samples[i][0] + samples[i][1] * samples[i][4]
 
+    # 1) every detour that could be cut off: (tightness, wall run before, wall run after, line, gap)
+    candidates = []
     for i in range(R):
-        if runs[i][0] != "wall" or used[i]:
+        if runs[i][0] != "wall":
             continue
         A = end_point(runs[i])
-        best = None
         path = fan = wall_in = 0.0
         for step in range(1, R - 1):          # bounded by the 60 m path limit below
             j = (i + step) % R
-            if used[j]:
-                break
             r = runs[j]
             if r[0] == "wall" and step > 1:
                 B = samples[r[1]][0]
@@ -414,15 +452,19 @@ def find_doors(samples, region, res):
                         and wall_in <= POCKET_MAX_WALL * path:
                     pts = _shortcut_line(A, B, core, res, strong_fan=fan >= POCKET_STRONG_FAN * path)
                     if pts is not None:
-                        best = (j, pts, gap)
+                        candidates.append((path / max(gap, 0.3), i, j, pts, gap))
             path += r[3]
             fan += r[3] if r[0] == "fan" else 0.0
             wall_in += r[3] if r[0] == "wall" else 0.0
             if path > 60.0:
                 break
-        if best is None:
+
+    # 2) tightest cut first (long detour closed by a short line = a doorway), never overlapping:
+    #    a narrow door is preferred over a wider cut that would also slice off part of the room
+    for _, i, j, pts, gap in sorted(candidates, key=lambda c: (-c[0], c[1], c[2])):
+        inner = [(i + m) % R for m in range(1, (j - i) % R)]
+        if used[i] or used[j] or any(used[m] for m in inner):
             continue
-        j, pts, gap = best
         start = (runs[i][1] + runs[i][2]) % N
         stop = runs[j][1]
         k = start
@@ -431,8 +473,8 @@ def find_doors(samples, region, res):
             k = (k + 1) % N
         kind = _gap_kind(gap) if len(pts) == 2 else ("wall" if gap < DOOR_MIN_M else "opening")
         cuts[start] = (pts, kind)
-        for m in range(1, (j - i) % R):
-            used[(i + m) % R] = True
+        for m in inner:
+            used[m] = True
 
     # plain fan stretches (no detour) between two walls
     runs = _runs(labels, lengths)
@@ -510,6 +552,7 @@ def outline(grid, raw, res):
     region, streaks = split_free_space(grid, res)
     wall = grid == 1
     SPIKE_MAX_PX[0] = SPIKE_MAX_M / res
+    SQUARE_DRIFT_PX[0] = SQUARE_MAX_DRIFT_M / res
     contours, hier = cv2.findContours(region.astype(np.uint8), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
     lines, polys = [], []
     for c, hrow in zip(contours, hier[0]):
